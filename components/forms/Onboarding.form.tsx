@@ -1,10 +1,9 @@
 "use client"
+import React, { ChangeEvent, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import {zodResolver} from "@hookform/resolvers/zod"
+import { userValidation } from '@/lib/validations/user.validation'
 
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import { z } from "zod"
-import { Textarea } from "../ui/textarea"
-import { useUser } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import {
   Form,
@@ -16,164 +15,166 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import Image from "next/image"
-import React, { useEffect, useState } from "react"
-import { useUploadThing } from "@/lib/uploadthing"
+import { z } from 'zod'
+import Image from 'next/image'
+import { isBase64Image } from '@/lib/utils'
+import { useUploadThing } from '@/lib/uploadthing'
+import { updateUser } from '@/lib/actions/user.actions'
+import { usePathname,useRouter } from 'next/navigation'
 
-
-const formSchema = z.object({
-  name: z.string().min(2, {
-    message: "name must be at least 2 characters.",
-  }),
-  bio: z.string().min(2, {
-    message: "bio must be at least 2 characters.",
-  }),
-  profile_pic:z.instanceof(File).optional(),
-  
-})
-
-
-
-
-function Onboardingform() {
-  const { isSignedIn, user, isLoaded } = useUser()
-  const [imagePreview,setImage] = useState<string|null>(user?.imageUrl||"")
-  const { startUpload } = useUploadThing("media");
-
-useEffect(()=>{
-  if(isLoaded && user?.imageUrl){
-    setImage(user.imageUrl);
-  }
-},[isLoaded,user?.imageUrl])
-
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: user?.fullName||"",
-      profile_pic:undefined,
-      bio:"",
-    },
-  })
-  
-
-  if(!isLoaded){
-    return <div>Loadinggg....</div>
-  }
-  
-
-  async function onSubmit(values: z.infer<typeof formSchema>) {
-    const user = useUser();
-    if(values.profile_pic){
-      try{
-        const uploadResponse = await startUpload([values.profile_pic]);
-        console.log("Upload response",uploadResponse);
-        
-        if(uploadResponse && uploadResponse[0].url){
-          const uploadedImageURL = uploadResponse[0].url;
-          
-          if(user.user){
-            user.user.imageUrl = uploadedImageURL;
-          }
-  
-          setImage(uploadedImageURL)
-          console.log("Form submitted with values:",values);
-  
-        }
-      }catch(error){
-      console.error("Error uploading the file or updating profile:", error);
-  
-
-    }
-    
+interface Props{
+  user:{
+    userid:string
+    objectId:object
+    username:string,
+    bio:string,
+    pfp:string,
+    name:string
   }
 }
 
-  //TODO:Learn more about handling file handling 
-  function handleImageChange(event: React.ChangeEvent<HTMLInputElement>){
-    const file = event.target.files?.[0]
-    if(!file?.type.startsWith("image/")){
-      console.error("Selected file is not image");
-      return
-      
+function OnboardingForm({user}:Props) {
+  const [files,setFiles] = useState<File[]>([])
+  const { startUpload} = useUploadThing("media");
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const form = useForm({
+    resolver:zodResolver(userValidation),
+    defaultValues:{
+      username:user.username||"",
+      bio:user.bio||"",
+      pfp:user.pfp||"",
+      name:user.name||""
     }
-    if(file){
-      const reader = new FileReader();
-      reader.onload = ()=>{
-        setImage(URL.createObjectURL(file));
-        form.setValue("profile_pic",file)
-      };
-      reader.readAsDataURL(file);
-    }else{
-      setImage(null);
-      form.setValue("profile_pic",undefined)
+  })
+
+  const handleImage = (e:ChangeEvent<HTMLInputElement>,fieldChange:(value:string)=>void)=>{
+    e.preventDefault();
+    const fileReader = new FileReader();
+
+    if(e.target.files&&e.target.files.length>0){
+      const file = e.target.files[0];
+
+      setFiles(Array.from(e.target.files));
+
+      if(!file.type.includes('image')) return; 
+
+      fileReader.onload = async (event) =>{
+        const imageDataUrl = event.target?.result?.toString()||"";
+
+        fieldChange(imageDataUrl)
+      }
+      fileReader.readAsDataURL(file);
     }
   }
-  
+
+  async function onSubmit(values:z.infer<typeof userValidation>) {
+    // Do something with the form values.
+    // ✅ This will be type-safe and validated.
+    const blob = values.pfp;
+    const hasImageChanged = isBase64Image(blob);
+
+    if(hasImageChanged){
+      const ImgRes = await startUpload(files)
+
+      if(ImgRes && ImgRes[0].url){
+        values.pfp = ImgRes[0].url
+      }
+    }
+    console.log("At update user");
+    
+    await updateUser(
+      {username:values.username,
+      name:values.name,
+      bio:values.bio,
+      userid:user.userid,
+      pfp:values.pfp,
+      path:pathname}
+    )
+    console.log("User updated successfully");
+    
+    // if(pathname ==='/profile/edit'||pathname==='/onboarding'){
+    //   router.push('/');
+    // }else{
+    //   router.push('/')
+    // }
+  }
 
 
 
   return (
+    <div>
+  <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <FormField
+          control={form.control}
+          name="pfp"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>PfP</FormLabel>
+              {field.value&&(
+                <Image
+                  src={field.value}
+                  height={30}
+                  width={30}
+                  alt='profile pic'
+                  priority
+                />
+              )}
+              <FormControl>
+                <Input 
+                  type='file'
+                  accept='image/*'
+                  placeholder='upload image'
+                  onChange={(e)=>handleImage(e,field.onChange)}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+          <FormField
+          control={form.control}
+          name="username"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Username</FormLabel>
+              <FormControl>
+                <Input placeholder="Username" {...field} />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+          <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Name</FormLabel>
+              <FormControl>
+                <Input placeholder="Username" {...field} />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+          <FormField
+          control={form.control}
+          name="bio"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Bio</FormLabel>
+              <FormControl>
+                <Input placeholder="Username" {...field} />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+        <Button type="submit">Submit</Button>
+      </form>
+    </Form>
 
-    <Form {...form} >
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8  ">
-    <FormField
-        control={form.control}
-        name="profile_pic"
-        render={({ field }) => (
-          <FormItem className="flex items-center">
-            {imagePreview &&(
-              <div>
-                <Image src={imagePreview} alt="profile pic" height={100} width={100} unoptimized/>
-              </div>
-            )
-
-            }
-            <FormControl >
-              <input className="text-sm " type="file" accept="image/*" onChange={handleImageChange}></input>
-            </FormControl>
-            
-            <FormDescription>
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-      
-      <FormField
-        control={form.control}
-        name="name"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Name</FormLabel>
-            <FormControl>
-              <Input placeholder="This is your public display name." {...field} />
-            </FormControl>
-            <FormDescription>
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      <FormField
-        control={form.control}
-        name="bio"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Bio</FormLabel>
-            <FormControl>
-              <Textarea placeholder="write someting about yourself" {...field}/>
-            </FormControl>
-            <FormDescription>
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-      <Button type="submit">Submit</Button>
-    </form>
-  </Form>
+    </div>
   )
 }
 
-export default Onboardingform
+export default OnboardingForm
