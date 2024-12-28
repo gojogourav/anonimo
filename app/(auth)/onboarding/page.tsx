@@ -1,6 +1,5 @@
 import Onboardingform from '@/components/forms/Onboarding.form'
 import React from 'react'
-import dbConnect from '@/lib/dbConnect'
 import { currentUser } from '@clerk/nextjs/server';
 import { fetchUser } from '@/lib/actions/user.actions';
 
@@ -21,7 +20,7 @@ export default async function Page() {
     username:userInfo?.username,
     bio:userInfo?.bio,
     pfp:userInfo?.pfp|| user?.imageUrl,
-    name:userInfo?.name
+    name:user?.fullName||""
   }
   return (
     <div className='h-screen w-full justify-center items-center flex bg-black text-white text-2xl'>

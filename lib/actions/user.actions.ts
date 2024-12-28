@@ -12,6 +12,11 @@ interface Params {
     userid: string
 }
 
+interface updateUserResponse{
+    data:any;
+    error?:string;
+}
+
 export async function updateUser(
     { username,
         name,
@@ -19,7 +24,9 @@ export async function updateUser(
         pfp,
         userid,
         path }: Params
-): Promise<void> {
+): Promise<updateUserResponse> {
+    console.log('Received update parameters:', { username, name, bio, pfp, userid, path });
+
     try {
         await dbConnect();
         console.log('Db connected in update user');
@@ -34,11 +41,14 @@ export async function updateUser(
             },
             { upsert: true }
         );
+        
 
         console.log("user updated successfully");
+        return{data: updateUser};
         
-    } catch (error) {
+    } catch (error:any) {
         console.log("error in updateUser", error);
+        return {data:null, error:error.message||"failed to update user"}
     }
 }
 

@@ -1,29 +1,26 @@
+"use server"
 import mongoose from "mongoose";
 
-type dbObject = {
-    isConnected?:number
-}
+let isConnected = false;
 
-const ConnectionObject:dbObject ={}
+const dbConnect = async () => {
+    if (isConnected) return;
+    console.log(process.env.MONGODB_URI);
+    
 
-async function dbConnect() {
     if (!process.env.MONGODB_URI) {
         throw new Error("MONGODB_URI is not defined in environment variables.");
     }
 
-    if (ConnectionObject.isConnected) {
-        console.log("Already connected to db");
-        return;
-    }
-
     try {
-        const connection = await mongoose.connect(process.env.MONGODB_URI);
-        ConnectionObject.isConnected = connection.connections[0].readyState;
-        console.log("Connected to database:", connection.connection.host);
-    } catch (err) {
-        console.error("Failed to connect db:", err);
-        process.exit(1);
+        await mongoose.connect(process.env.MONGODB_URI, {
+        });
+        isConnected = true;
+        console.log("MongoDB connected");
+    } catch (error) {
+        console.error("MongoDB connection error:", error);
+        throw error;
     }
-}
+};
 
 export default dbConnect;
