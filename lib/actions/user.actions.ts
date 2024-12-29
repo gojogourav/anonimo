@@ -1,7 +1,6 @@
-import mongoose from "mongoose";
+"use server"
 import dbConnect from "../dbConnect";
 import User from "../model/user.model";
-import { revalidatePath } from "next/cache";
 
 interface Params {
     username: string,
@@ -31,7 +30,7 @@ export async function updateUser(
         await dbConnect();
         console.log('Db connected in update user');
         
-        await User.findOneAndUpdate(
+        const updatedUser = await User.findOneAndUpdate(
             { userid: userid },
             {
                 username: username.toLowerCase(),
@@ -41,10 +40,11 @@ export async function updateUser(
             },
             { upsert: true }
         );
+
         
 
         console.log("user updated successfully");
-        return{data: updateUser};
+        return{data: updatedUser};
         
     } catch (error:any) {
         console.log("error in updateUser", error);
